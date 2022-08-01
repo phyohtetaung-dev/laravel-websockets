@@ -1,39 +1,69 @@
-/**
- * First we will load all of this project's JavaScript dependencies which
- * includes Vue and other libraries. It is a great starting point when
- * building robust, powerful web applications using Vue and Laravel.
- */
-
 import './bootstrap';
 import { createApp } from 'vue';
+import ChatForm from './components/ChatForm.vue';
+import ChatMessages from './components/ChatMessages.vue';
 
-/**
- * Next, we will create a fresh Vue application instance. You may then begin
- * registering components with the application instance so they are ready
- * to use in your application's views. An example is included for you.
- */
+const app = createApp({
+    data() {
+        return {
+            messages: [],
+            users: [],
+        }
+    },
 
-const app = createApp({});
+    mounted() {
+        this.fetchMessages();
 
-import ExampleComponent from './components/ExampleComponent.vue';
-app.component('example-component', ExampleComponent);
+        Echo.join('chat')
+            .here(users => {
+                this.users = users;
+            })
+            .joining(user => {
+                this.users.push(user);
+            })
+            .leaving(user => {
+                this.users = this.users.filter(u => u.id !== user.id);
+            })
+            .listenForWhisper('typing', ({ id, name }) => {
+                this.users.forEach((user, index) => {
+                    if (user.id === id) {
+                        user.typing = true;
+                        this.users[index] = user;
+                    }
+                });
+            })
+            .listen('SendChatMessage', (event) => {
+                this.messages.push({
+                    message: event.message.message,
+                    user: event.user
+                });
 
-/**
- * The following block of code may be used to automatically register your
- * Vue components. It will recursively scan this directory for the Vue
- * components and automatically register them with their "basename".
- *
- * Eg. ./components/ExampleComponent.vue -> <example-component></example-component>
- */
+                this.users.forEach((user, index) => {
+                    if (user.id === event.user.id) {
+                        user.typing = false;
+                        this.users[index] = user;
+                    }
+                });
+            });
+    },
 
-// Object.entries(import.meta.globEager('./**/*.vue')).forEach(([path, definition]) => {
-//     app.component(path.split('/').pop().replace(/\.\w+$/, ''), definition.default);
-// });
+    methods: {
+        fetchMessages() {
+            axios.get('/messages').then(response => {
+                this.messages = response.data;
+            });
+        },
 
-/**
- * Finally, we will attach the application instance to a HTML element with
- * an "id" attribute of "app". This element is included with the "auth"
- * scaffolding. Otherwise, you will need to add an element yourself.
- */
+        addMessage(message) {
+            this.messages.push(message);
 
+            axios.post('/messages', message).then(response => {
+                console.log(response.data);
+            });
+        }
+    }
+});
+
+app.component('chat-form', ChatForm);
+app.component('chat-messages', ChatMessages);
 app.mount('#app');
